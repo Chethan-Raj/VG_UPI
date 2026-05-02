@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "VG-UPI",
+    "slug": "vg-upi",
+    "version": "1.1.0",
+    "sdkVersion": "51.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "android": {
+      "adaptiveIcon": {
+		"foregroundImage": "./assets/adaptive-icon.png",
+		"monochromeImage": "./assets/adaptive-icon.png",
+		"backgroundColor": "#1a1a2e"
+      },
+      "package": "com.vg.upiqr",
+      "versionCode": 1,
+      "permissions": []
+    },
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "80370582-b485-4d36-9de6-c150ecca514e"
+      }
+    }
+  }
+}
