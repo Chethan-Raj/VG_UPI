@@ -7,28 +7,26 @@ import QRCode from "react-native-qrcode-svg";
 import { captureRef } from "react-native-view-shot";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { UPI_CONFIG } from "../upiConfig";
 import { usePayments } from "./PaymentContext";
 
 export default function QRScreen({ route, navigation }) {
-  const { amount } = route.params;
+  const { amount, account } = route.params;
   const { addPayment } = usePayments();
   const [paymentStatus, setPaymentStatus] = useState(null); // null | 'success' | 'failed'
   const qrCardRef = useRef(null);
 
   const upiString = useMemo(() => {
     const params = new URLSearchParams({
-      pa: UPI_CONFIG.upiId,
-      pn: UPI_CONFIG.name,
+      pa: account.upiId,
+      pn: account.name,
       am: amount,
-      cu: UPI_CONFIG.currency,
+      cu: account.currency || "INR",
     });
     return `upi://pay?${params.toString()}`;
-  }, [amount]);
+  }, [amount, account]);
 
   const handleShare = async () => {
     try {
-      // Capture the QR card as image and share
       const uri = await captureRef(qrCardRef, {
         format: "png",
         quality: 1,
@@ -40,9 +38,8 @@ export default function QRScreen({ route, navigation }) {
           dialogTitle: `Pay ₹${amount} - UPI QR`,
         });
       } else {
-        // Fallback to text share
         await Share.share({
-          message: `Pay ₹${amount} to ${UPI_CONFIG.name}\nUPI ID: ${UPI_CONFIG.upiId}`,
+          message: `Pay ₹${amount} to ${account.name}\nUPI ID: ${account.upiId}`,
         });
       }
     } catch (_) {}
@@ -50,7 +47,7 @@ export default function QRScreen({ route, navigation }) {
 
   const handleNewAmount = () => {
     if (paymentStatus === "success") {
-      addPayment(amount);
+      addPayment(amount, account.id);
     }
     navigation.navigate("Home", { resetAmount: true });
   };
@@ -109,8 +106,10 @@ export default function QRScreen({ route, navigation }) {
 
         <View style={styles.upiRow}>
           <Text style={styles.upiLabel}>UPI ID</Text>
-          <Text style={styles.upiId}>{UPI_CONFIG.name}</Text>
+          <Text style={styles.upiId}>{account.name}</Text>
         </View>
+
+        <Text style={styles.upiIdSmall}>{account.upiId}</Text>
 
         <Text style={styles.hint}>Open any UPI app → Scan QR → Pay</Text>
 
@@ -207,6 +206,7 @@ const styles = StyleSheet.create({
   },
   upiLabel: { fontSize: 12, color: "#888", fontWeight: "600" },
   upiId: { fontSize: 13, color: "#1a1a2e", fontWeight: "700" },
+  upiIdSmall: { fontSize: 11, color: "#aaa", marginTop: 4 },
 
   hint: { fontSize: 12, color: "#aaa", marginTop: 14, textAlign: "center" },
 

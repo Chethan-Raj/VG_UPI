@@ -21,13 +21,23 @@ function formatDate(iso) {
 }
 
 export default function PaymentHistoryScreen({ navigation }) {
-  const { payments, clearPayments } = usePayments();
+  const { payments, accounts, clearPayments } = usePayments();
   const now = new Date();
 
-  // Get unique year-month combos from payments
+  // Account filter — "all" or account.id
+  const [selectedAccountFilter, setSelectedAccountFilter] = useState("all");
+  const [accountDropdownVisible, setAccountDropdownVisible] = useState(false);
+
+  // Payments filtered by account
+  const accountFilteredPayments = useMemo(() => {
+    if (selectedAccountFilter === "all") return payments;
+    return payments.filter((p) => p.accountId === selectedAccountFilter);
+  }, [payments, selectedAccountFilter]);
+
+  // Month filter chips derived from account-filtered payments
   const availableMonths = useMemo(() => {
     const set = new Set();
-    payments.forEach((p) => {
+    accountFilteredPayments.forEach((p) => {
       const d = new Date(p.date);
       set.add(`${d.getFullYear()}-${d.getMonth()}`);
     });
@@ -37,35 +47,46 @@ export default function PaymentHistoryScreen({ navigation }) {
         return { year: y, month: m, key: s };
       })
       .sort((a, b) => b.year - a.year || b.month - a.month);
-  }, [payments]);
+  }, [accountFilteredPayments]);
 
   const [selectedMonthKey, setSelectedMonthKey] = useState(null);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
+  // Reset month filter when account changes
+  const handleAccountFilter = (id) => {
+    setSelectedAccountFilter(id);
+    setSelectedMonthKey(null);
+    setAccountDropdownVisible(false);
+  };
+
   const filteredPayments = useMemo(() => {
-    if (!selectedMonthKey) return payments;
+    if (!selectedMonthKey) return accountFilteredPayments;
     const [y, m] = selectedMonthKey.split("-").map(Number);
-    return payments.filter((p) => {
+    return accountFilteredPayments.filter((p) => {
       const d = new Date(p.date);
       return d.getFullYear() === y && d.getMonth() === m;
     });
-  }, [payments, selectedMonthKey]);
+  }, [accountFilteredPayments, selectedMonthKey]);
 
   const totalAmount = useMemo(
     () => filteredPayments.reduce((sum, p) => sum + p.amount, 0),
     [filteredPayments]
   );
 
+  const selectedAccountObj =
+    selectedAccountFilter === "all"
+      ? null
+      : accounts.find((a) => a.id === selectedAccountFilter);
+
   const getExportLabel = () => {
-    if (!selectedMonthKey) return "Export All as PDF";
+    const accountPart = selectedAccountObj ? selectedAccountObj.name : "All Accounts";
+    if (!selectedMonthKey) return `Export ${accountPart} — All`;
     const [y, m] = selectedMonthKey.split("-").map(Number);
     const isCurrentMonth = y === now.getFullYear() && m === now.getMonth();
-    if (isCurrentMonth) {
-      return `Export ${MONTH_NAMES[m]} (till today)`;
-    }
-    return `Export ${MONTH_NAMES[m]} ${y} as PDF`;
+    if (isCurrentMonth) return `Export ${accountPart} — ${MONTH_NAMES[m]} (till today)`;
+    return `Export ${accountPart} — ${MONTH_NAMES[m]} ${y}`;
   };
 
   const handleExportPDF = async () => {
@@ -74,7 +95,7 @@ export default function PaymentHistoryScreen({ navigation }) {
       return;
     }
 
-    let periodLabel = "All Transactions";
+    let periodLabel = "All Time";
     if (selectedMonthKey) {
       const [y, m] = selectedMonthKey.split("-").map(Number);
       const isCurrentMonth = y === now.getFullYear() && m === now.getMonth();
@@ -83,27 +104,44 @@ export default function PaymentHistoryScreen({ navigation }) {
         : `${MONTH_NAMES[m]} ${y}`;
     }
 
+    const accountLabel = selectedAccountObj
+      ? `${selectedAccountObj.name} (${selectedAccountObj.upiId})`
+      : "All Accounts";
+
     const rows = filteredPayments
       .map(
-        (p, i) => `
+        (p, i) => {
+          const acc = accounts.find((a) => a.id === p.accountId);
+          const accCell = selectedAccountFilter === "all"
+            ? `<td style="padding:10px 14px; border-bottom:1px solid #eee; font-size:12px; color:#666">${acc ? acc.name : "—"}</td>`
+            : "";
+          return `
         <tr style="background:${i % 2 === 0 ? "#f9f9f9" : "#fff"}">
           <td style="padding:10px 14px; border-bottom:1px solid #eee">${i + 1}</td>
           <td style="padding:10px 14px; border-bottom:1px solid #eee">${formatDate(p.date)}</td>
+          ${accCell}
           <td style="padding:10px 14px; border-bottom:1px solid #eee; font-weight:700; color:#1a1a2e">₹${p.amount.toFixed(2)}</td>
-        </tr>`
+        </tr>`;
+        }
       )
       .join("");
+
+    const accountHeader = selectedAccountFilter === "all"
+      ? `<th style="padding:12px 14px; text-align:left">Account</th>`
+      : "";
 
     const html = `
       <html>
       <body style="font-family: Arial, sans-serif; padding: 32px; color: #222">
         <h2 style="color:#1a1a2e; margin-bottom:4px">UPI QR Pay — Payment History</h2>
-        <p style="color:#888; font-size:13px; margin-bottom:24px">Period: ${periodLabel}</p>
+        <p style="color:#555; font-size:13px; margin-bottom:2px"><strong>Account:</strong> ${accountLabel}</p>
+        <p style="color:#888; font-size:13px; margin-bottom:24px"><strong>Period:</strong> ${periodLabel}</p>
         <table style="width:100%; border-collapse:collapse; font-size:14px">
           <thead>
             <tr style="background:#1a1a2e; color:#fff">
               <th style="padding:12px 14px; text-align:left">#</th>
               <th style="padding:12px 14px; text-align:left">Date & Time</th>
+              ${accountHeader}
               <th style="padding:12px 14px; text-align:left">Amount</th>
             </tr>
           </thead>
@@ -142,6 +180,11 @@ export default function PaymentHistoryScreen({ navigation }) {
     }
   };
 
+  const accountFilterLabel =
+    selectedAccountFilter === "all"
+      ? "All Accounts"
+      : (accounts.find((a) => a.id === selectedAccountFilter)?.name || "All Accounts");
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
@@ -156,8 +199,18 @@ export default function PaymentHistoryScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Month Filter */}
+      {/* Account Filter Dropdown */}
       <View style={styles.filterSection}>
+        <TouchableOpacity
+          style={styles.accountDropdown}
+          onPress={() => setAccountDropdownVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.accountDropdownText}>👤 {accountFilterLabel}</Text>
+          <Text style={styles.accountDropdownChevron}>⌄</Text>
+        </TouchableOpacity>
+
+        {/* Month Filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.monthScroll}>
           <TouchableOpacity
             style={[styles.monthChip, !selectedMonthKey && styles.monthChipActive]}
@@ -195,25 +248,31 @@ export default function PaymentHistoryScreen({ navigation }) {
       {filteredPayments.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>📭</Text>
-          <Text style={styles.emptyText}>No successful payments yet</Text>
+          <Text style={styles.emptyText}>No payments for selected filter</Text>
         </View>
       ) : (
         <FlatList
           data={filteredPayments}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 120 }}
-          renderItem={({ item }) => (
-            <View style={styles.txRow}>
-              <View style={styles.txIcon}>
-                <Text style={styles.txIconText}>✓</Text>
+          renderItem={({ item }) => {
+            const acc = accounts.find((a) => a.id === item.accountId);
+            return (
+              <View style={styles.txRow}>
+                <View style={styles.txIcon}>
+                  <Text style={styles.txIconText}>✓</Text>
+                </View>
+                <View style={styles.txInfo}>
+                  <Text style={styles.txDate}>{formatDate(item.date)}</Text>
+                  {selectedAccountFilter === "all" && acc && (
+                    <Text style={styles.txAccount}>{acc.name}</Text>
+                  )}
+                  <Text style={styles.txStatus}>Successful</Text>
+                </View>
+                <Text style={styles.txAmount}>₹{item.amount.toFixed(2)}</Text>
               </View>
-              <View style={styles.txInfo}>
-                <Text style={styles.txDate}>{formatDate(item.date)}</Text>
-                <Text style={styles.txStatus}>Successful</Text>
-              </View>
-              <Text style={styles.txAmount}>₹{item.amount.toFixed(2)}</Text>
-            </View>
-          )}
+            );
+          }}
         />
       )}
 
@@ -224,6 +283,48 @@ export default function PaymentHistoryScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Account Dropdown Modal */}
+      <Modal
+        visible={accountDropdownVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAccountDropdownVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setAccountDropdownVisible(false)}
+        >
+          <View style={styles.dropdownSheet} onStartShouldSetResponder={() => true}>
+            <Text style={styles.dropdownTitle}>Filter by Account</Text>
+            <TouchableOpacity
+              style={[styles.dropdownItem, selectedAccountFilter === "all" && styles.dropdownItemActive]}
+              onPress={() => handleAccountFilter("all")}
+            >
+              <Text style={[styles.dropdownItemText, selectedAccountFilter === "all" && styles.dropdownItemTextActive]}>
+                All Accounts
+              </Text>
+              {selectedAccountFilter === "all" && <Text style={styles.checkMark}>✓</Text>}
+            </TouchableOpacity>
+            {accounts.map((acc) => (
+              <TouchableOpacity
+                key={acc.id}
+                style={[styles.dropdownItem, selectedAccountFilter === acc.id && styles.dropdownItemActive]}
+                onPress={() => handleAccountFilter(acc.id)}
+              >
+                <View style={styles.dropdownItemInner}>
+                  <Text style={[styles.dropdownItemText, selectedAccountFilter === acc.id && styles.dropdownItemTextActive]}>
+                    {acc.name}
+                  </Text>
+                  <Text style={styles.dropdownItemUpi}>{acc.upiId}</Text>
+                </View>
+                {selectedAccountFilter === acc.id && <Text style={styles.checkMark}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* PIN Modal */}
       <Modal
         visible={pinModalVisible}
@@ -231,7 +332,7 @@ export default function PaymentHistoryScreen({ navigation }) {
         animationType="fade"
         onRequestClose={() => setPinModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={styles.pinOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Enter PIN to Clear</Text>
             <Text style={styles.modalSubtitle}>This will permanently delete all history.</Text>
@@ -279,6 +380,23 @@ const styles = StyleSheet.create({
   clearText: { color: "#f44336", fontSize: 14, fontWeight: "700" },
 
   filterSection: { backgroundColor: "#1a1a2e", paddingBottom: 14 },
+
+  accountDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginBottom: 10,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  accountDropdownText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  accountDropdownChevron: { color: "#aaa", fontSize: 16 },
+
   monthScroll: { paddingHorizontal: 20, gap: 8 },
   monthChip: {
     paddingHorizontal: 14,
@@ -333,6 +451,7 @@ const styles = StyleSheet.create({
   txIconText: { color: "#4caf50", fontSize: 16, fontWeight: "800" },
   txInfo: { flex: 1 },
   txDate: { fontSize: 13, color: "#444", fontWeight: "500" },
+  txAccount: { fontSize: 11, color: "#1a1a2e", fontWeight: "700", marginTop: 1 },
   txStatus: { fontSize: 11, color: "#4caf50", fontWeight: "600", marginTop: 2 },
   txAmount: { fontSize: 16, fontWeight: "800", color: "#1a1a2e" },
 
@@ -352,7 +471,48 @@ const styles = StyleSheet.create({
   },
   exportText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 
+  // Account dropdown modal
   modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-start",
+    paddingTop: 120,
+    paddingHorizontal: 20,
+  },
+  dropdownSheet: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingVertical: 8,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  dropdownTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#aaa",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dropdownItemActive: { backgroundColor: "#f0f0f8" },
+  dropdownItemInner: { flex: 1 },
+  dropdownItemText: { fontSize: 15, fontWeight: "600", color: "#333", flex: 1 },
+  dropdownItemTextActive: { color: "#1a1a2e" },
+  dropdownItemUpi: { fontSize: 12, color: "#888", marginTop: 2 },
+  checkMark: { fontSize: 16, color: "#1a1a2e", fontWeight: "800" },
+
+  // PIN modal
+  pinOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",

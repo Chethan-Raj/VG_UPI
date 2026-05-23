@@ -1,9 +1,15 @@
-// ============================================
-// EDIT ONLY THIS FILE to change your UPI details
-// ============================================
-
-export const UPI_CONFIG = {
-  upiId: "9342188415@hdfc",         // 👈 Replace with your UPI ID
-  name: "Vasavi Gems",                  // 👈 Your name (shown to payer)
-  currency: "INR",
-};
+// Default accounts — users can add more via the app UI
+export const DEFAULT_ACCOUNTS = [
+  {
+    id: "1",
+    name: "Vasavi Gems",
+    upiId: "9342188415@hdfc",
+    currency: "INR",
+  },
+  {
+	id: "2",
+    name: "Chethan Raj PN",
+    upiId: "9590959068@upi",
+    currency: "INR",
+  }
+];
